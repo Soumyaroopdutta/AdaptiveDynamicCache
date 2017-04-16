@@ -57,15 +57,19 @@ public class TestCaches {
 						sCurrentLine.indexOf(','));
 				String size = sCurrentLine.substring(
 						sCurrentLine.indexOf(',') + 1, sCurrentLine.length());
+
+				System.err.println(file + " " + size);
 				if ((isHit = cacheobject.get(file,
 						Integer.parseInt(size))) == Cache.accessState.HIT) {
 					hits++;
+					System.out.println("HIT");
 				} else if (isHit == Cache.accessState.MISS) {
 					miss++;
+					System.out.println("MISS");
 				}
 
-				System.out.println(
-						file + " " + Integer.parseInt(size) + "-->" + isHit);
+				// System.out.println(
+				// file + " " + Integer.parseInt(size) + "-->" + isHit);
 				Thread.sleep(500);
 			}
 
