@@ -9,7 +9,7 @@ public class BaseLRU implements Cache {
 	private LinkedHashMap<String, Integer> cache;
 
 	public BaseLRU(int size) {
-		cache = new LinkedHashMap<>(10000, .75F, false);
+		cache = new LinkedHashMap<>(10000, .75F, true);
 
 		total_size = size;
 		curr_usage = 0;
@@ -22,14 +22,13 @@ public class BaseLRU implements Cache {
 			int file_size = cache.get(filename);
 
 			if (size != file_size) {
-				curr_usage -= file_size;
-				cache.remove(filename);
+				deleteEntry(filename);
 
-				if (size == 0) {
-					return Cache.accessState.NONE;
-				} else {
+				if (size != 0) {
 					get(filename, size);
 				}
+
+				return Cache.accessState.NONE;
 			}
 
 			return Cache.accessState.HIT;
@@ -66,9 +65,9 @@ public class BaseLRU implements Cache {
 		}
 	}
 
-	@Override
 	public void deleteEntry(String filename) {
-		// TODO Auto-generated method stub
+		int remove_size = cache.remove(filename);
 
+		curr_usage -= remove_size;
 	}
 }

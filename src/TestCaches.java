@@ -62,20 +62,18 @@ public class TestCaches {
 				if ((isHit = cacheobject.get(file,
 						Integer.parseInt(size))) == Cache.accessState.HIT) {
 					hits++;
-					System.out.println("HIT");
+					System.err.println("HIT");
 				} else if (isHit == Cache.accessState.MISS) {
 					miss++;
-					System.out.println("MISS");
+					System.err.println("MISS");
 				}
 
-				// System.out.println(
-				// file + " " + Integer.parseInt(size) + "-->" + isHit);
 				Thread.sleep(500);
 			}
 
 			System.err
 					.println("TEST ENDED----> HITS " + hits + " MISS " + miss);
-			System.err.println("HIT Ratio --->" + hits / miss);
+			System.err.println("HIT Ratio --->" + hits / (hits + miss));
 		} catch (IOException e) {
 			e.printStackTrace();
 		} finally {
@@ -128,7 +126,7 @@ public class TestCaches {
 			System.exit(0);
 		}
 
-		BaseLRU cache_dynamic = new BaseLRU(size);
+		DynamicCache cache_dynamic = new DynamicCache(size);
 		System.err.println("Running Dynamic Caching Performance");
 		test.run_trace(cache_dynamic);
 		System.err.println("Dynamic RESULTS ^^^^^\n\n");
