@@ -3,12 +3,26 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 
+/**
+ * This implementation doesn't yet test parallel execution of the cache. For
+ * this implementation we can assume that the execution would be 1 access per
+ * sec or any unit desired and the Rebalancer Ticks can therefore be tweaked
+ * accrodingly.
+ *
+ * But, the performance could be assumed to be similar, or better as the number
+ * of accesses in the given time would be much better.
+ */
 public class DynamicCache implements Cache {
 	public enum Priority {
 		BOTTOM, MIDDLE, TOP;
 	}
 
-	private int HISTORY_COUNT = 10;
+	private final int HISTORY_COUNT = 10; // number of entries in evicted table.
+
+	private final int DEMOTION_CYCLE = 30; // 30sec or 30 accesses this case.
+	private final int PROMOTION_CYCLE = 10; // 10sec or 10 accesses this case.
+	private final int PROMOTION_CRITERIA = 3; // 3 asses in current cycle.
+	private long fake_ticks = 0;
 
 	private HashMap<Priority, LinkedHashMap<String, cache_entry>> priority_cache;
 	private HashMap<String, Priority> cache_priority;
@@ -38,9 +52,103 @@ public class DynamicCache implements Cache {
 		total_size = size;
 	}
 
+	@SuppressWarnings("unchecked")
+	private void demoteEntries() {
+		/* check the MIDDLE tier entries */
+		LinkedHashMap<String, cache_entry> tempList = new LinkedHashMap<>();
+		tempList = (LinkedHashMap<String, cache_entry>) priority_cache
+				.get(Priority.MIDDLE).clone();
+		List<String> keylist = new ArrayList<>(tempList.keySet());
+
+		/* look for at least one which satisfies this requirement */
+		for (String file : keylist) {
+			if (fake_ticks - tempList.get(file).lastaccess < DEMOTION_CYCLE) {
+				break;
+			}
+
+			cache_entry entry = priority_cache.get(Priority.MIDDLE)
+					.remove(file);
+			cache_priority.put(file, Priority.BOTTOM);
+			entry.priority = Priority.BOTTOM;
+			priority_cache.get(Priority.BOTTOM).put(file, entry);
+		}
+
+		/* check the TOP entries */
+		tempList = new LinkedHashMap<>();
+		tempList = (LinkedHashMap<String, cache_entry>) priority_cache
+				.get(Priority.TOP).clone();
+		keylist = new ArrayList<>(tempList.keySet());
+
+		/* look for at least one which satisfies this requirement */
+		for (String file : keylist) {
+			if (fake_ticks - tempList.get(file).lastaccess < DEMOTION_CYCLE) {
+				break;
+			}
+
+			cache_entry entry = priority_cache.get(Priority.TOP).remove(file);
+			cache_priority.put(file, Priority.MIDDLE);
+			entry.priority = Priority.MIDDLE;
+			priority_cache.get(Priority.MIDDLE).put(file, entry);
+		}
+
+	}
+
+	private void checkifPeriodEnd(String file, Priority priority) {
+		if ((fake_ticks / PROMOTION_CYCLE) != (priority_cache.get(priority)
+				.get(file).lastaccess / PROMOTION_CYCLE)) {
+			System.err.println("Clearing out Acount of " + file);
+			priority_cache.get(priority).get(file).AccessCount = 0;
+		} else {
+			System.err.println("last access = "
+					+ (priority_cache.get(priority).get(file).lastaccess)
+					+ " curr ticks " + fake_ticks);
+		}
+	}
+
+	private void promoteEntry(String file, Priority priority) {
+		/*
+		 * check if the last access time was not in this Promotion Cycle. If
+		 * not, Clear out the Access Count number.
+		 */
+		checkifPeriodEnd(file, priority);
+		priority_cache.get(priority).get(file).lastaccess = fake_ticks;
+		priority_cache.get(priority).get(file).AccessCount++;
+		/*
+		 * check if the Access Count is greater than the criteria for promotion.
+		 * If it satisfies, then promote it to the higher level.
+		 */
+		if (priority_cache.get(priority)
+				.get(file).AccessCount >= PROMOTION_CRITERIA) {
+			if (priority == Priority.TOP) {
+				return; // can't be promoted anymore.
+			} else {
+				cache_entry entry = priority_cache.get(priority).remove(file);
+				System.err.println("Promoting Entry from " + priority
+						+ " to higher bucket ");
+				if (priority == Priority.MIDDLE) {
+					priority_cache.get(Priority.TOP).put(file, entry);
+					cache_priority.put(file, Priority.TOP);
+				} else {
+					priority_cache.get(Priority.MIDDLE).put(file, entry);
+					cache_priority.put(file, Priority.MIDDLE);
+				}
+			}
+		}
+	}
+
 	@Override
 	public accessState get(String filename, int size) {
 		Priority entryPriority = Priority.MIDDLE;
+
+		/*
+		 * Using fake timer instead of a real timer, for controlled execution.
+		 * Given the single threaded usage in this case. It won't effect much
+		 * with the continuous traces being run.
+		 */
+		fake_ticks++;
+		if (fake_ticks % DEMOTION_CYCLE == 0) {
+			demoteEntries();
+		}
 
 		/* if the element is not already in the cache */
 		if (cache_priority.containsKey(filename) == false) {
@@ -55,11 +163,17 @@ public class DynamicCache implements Cache {
 				entry = new cache_entry(size, entryPriority);
 			}
 
+			entry.lastaccess = fake_ticks;
 			entry.AccessCount++;
-			entry.lastaccess = System.currentTimeMillis();
 
 			if (curr_size + size > total_size) {
 				if (free_space_incache(entry) == false) {
+					if ((fake_ticks / PROMOTION_CYCLE) != (entry.lastaccess
+							/ PROMOTION_CYCLE)) {
+						System.err
+								.println("Clearing out Acount of " + filename);
+						entry.AccessCount = 0;
+					}
 					evicted_entries.put(filename, entry);
 					return accessState.MISS;
 				}
@@ -85,11 +199,8 @@ public class DynamicCache implements Cache {
 			return accessState.NONE;
 		}
 
-		priority_cache.get(entryPriority).get(filename).lastaccess = System
-				.currentTimeMillis();
-		priority_cache.get(entryPriority).get(filename).AccessCount++;
+		promoteEntry(filename, entryPriority);
 
-		System.err.println("Curr Size " + curr_size);
 		return accessState.HIT;
 	}
 
@@ -120,6 +231,7 @@ public class DynamicCache implements Cache {
 			return false;
 		}
 
+		System.err.println("Freed up space in cache. Now size " + curr_size);
 		return true;
 	}
 
@@ -140,6 +252,9 @@ public class DynamicCache implements Cache {
 			/* look for at least one which satisfies this requirement */
 			for (String file : keylist) {
 				if (forentry.AccessCount > list2.get(file).AccessCount) {
+					System.err.println("evicting " + file + " with Acount "
+							+ forentry.AccessCount + " > "
+							+ list2.get(file).AccessCount);
 					filename = file;
 					break;
 				}
@@ -172,6 +287,8 @@ public class DynamicCache implements Cache {
 		cache_entry entry = priority_cache.get(entryPriority).remove(filename);
 		curr_size -= entry.size;
 		evicted_entries.put(filename, entry);
+		cache_priority.remove(filename);
+		System.err.println("Removed  " + filename + " from cache");
 	}
 
 	public class cache_entry {
@@ -183,7 +300,7 @@ public class DynamicCache implements Cache {
 
 		public cache_entry(int size, Priority priority) {
 			this.size = size;
-			this.lastaccess = System.currentTimeMillis();
+			this.lastaccess = fake_ticks;
 			this.priority = priority;
 			this.AccessCount = 0;
 		}
