@@ -34,7 +34,7 @@ public class DynamicCache implements Cache {
 	public DynamicCache(int size) {
 
 		cache_priority = new HashMap<>();
-		evicted_entries = new LinkedHashMap<>(HISTORY_COUNT, .75F, false);
+		evicted_entries = new LinkedHashMap<>(HISTORY_COUNT, .75F, true);
 
 		LinkedHashMap<String, cache_entry> top_cache;
 		LinkedHashMap<String, cache_entry> middle_cache;

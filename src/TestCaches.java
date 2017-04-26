@@ -3,6 +3,23 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.Scanner;
 
+/**
+ * TODO in paper/evaluation
+ * 1. Need to measure effect on time (how slow is Adaptive cache over LRU) -> test on large traces
+ * 2. Any assumptions? Single threaded... Uniform page sizes? -> to be mentioned in paper. Can tag as "experimentation"
+ * 3. Measure Memory overhead. (More state saved in Adaptive, than in LRU)
+ * 4. History of evicted entries: memory footprint: 
+ * how we could only store metadata/id of evicted entry and not the data itself (like in ARC)
+ * 5.
+ * 
+ * Evaluation
+ * 1. 11112345611111 => cache size 5 (mixed)
+ * 2. 111122334455661111 => cache 5 (better than arc)
+ * 3. memory footprint
+ * 4. time 
+ * 5. 1111223344556674583835885484892488942892461111 => 30 accesses
+ * 6. 123456123456123456 => cache size is 5 => cache hints
+ */
 public class TestCaches {
 	String trace;
 
